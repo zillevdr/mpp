@@ -2268,12 +2268,41 @@ h264e_rkv_update_hw_cfg(H264eHalContext *ctx, HalEncTask *task,
     /* slice mode setup */
     hw_cfg->slice_size_mb_rows = (prep->width + 15) >> 4;
 
-    /* input and preprocess config */
+    /* input and preprocess config, the offset is at [31:10] */
     hw_cfg->input_luma_addr = mpp_buffer_get_fd(task->input);
-    hw_cfg->input_cb_addr = hw_cfg->input_luma_addr;
-    hw_cfg->input_cr_addr = hw_cfg->input_cb_addr;
-    hw_cfg->output_strm_limit_size = mpp_buffer_get_size(task->output);
+    switch (prep->format) {
+    case MPP_FMT_YUV422SP:
+    case MPP_FMT_YUV420SP:
+    case MPP_FMT_YUV420SP_VU:
+    case MPP_FMT_YUV422SP_VU: {
+        RK_U32 offset_uv = hw_cfg->hor_stride * hw_cfg->ver_stride;
+        hw_cfg->input_cb_addr = hw_cfg->input_luma_addr + (offset_uv << 10);
+        hw_cfg->input_cr_addr = 0;
+        break;
+    }
+    case MPP_FMT_YUV422P: {
+        RK_U32 offset_y = hw_cfg->hor_stride * hw_cfg->ver_stride;
+        hw_cfg->input_cb_addr = hw_cfg->input_luma_addr + (offset_y << 10);
+        hw_cfg->input_cr_addr = hw_cfg->input_cb_addr + (offset_y << 9);
+        break;
+    }
+    case MPP_FMT_YUV420P: {
+        RK_U32 offset_y = hw_cfg->hor_stride * hw_cfg->ver_stride;
+        hw_cfg->input_cb_addr = hw_cfg->input_luma_addr + (offset_y << 10);
+        hw_cfg->input_cr_addr = hw_cfg->input_cb_addr + (offset_y << 8);
+        break;
+    }
+    case MPP_FMT_YUV422_YUYV:
+    case MPP_FMT_YUV422_UYVY:
+        hw_cfg->input_luma_addr = 0;
+        hw_cfg->input_cr_addr = 0;
+        break;
+    default:
+        return MPP_ERR_VALUE;
+    }
     hw_cfg->output_strm_addr = mpp_buffer_get_fd(task->output);
+    hw_cfg->output_strm_limit_size = mpp_buffer_get_size(task->output);
+
 
     return MPP_OK;
 }
